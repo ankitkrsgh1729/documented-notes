@@ -363,6 +363,26 @@ secrets:
     file: ./secrets/db_password.txt  # File contains just the password
 ```
 
+**⚠️ Important: Docker Secrets vs Regular Files**
+
+#### ❌ UNSAFE: Regular file in Docker image
+```dockerfile
+# DON'T DO THIS - puts secret in image
+COPY secrets/db_password.txt /app/secrets/
+# Anyone with image access can see: docker run --rm myapp cat /app/secrets/db_password.txt
+```
+
+#### ✅ SAFE: Docker Swarm secrets (mounted at runtime)
+```yaml
+# Docker Swarm manages secrets separately from images
+# Secrets are:
+# - Encrypted at rest
+# - Encrypted in transit  
+# - Only mounted to authorized containers
+# - Never part of the image layers
+```
+
+**Limitation:** Docker secrets only work with **Docker Swarm**, not regular `docker run`.
 
 ### ✅ Cloud Secret Managers
 ```java
