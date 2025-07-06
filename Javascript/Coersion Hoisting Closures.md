@@ -261,7 +261,7 @@ bankBalance = 0; // Oops!
 function createBankAccount(initialBalance) {
     let balance = initialBalance;  // Private variable
     
-    return {
+    return {     // It's mostly because the function is getting returned, that's why it'll return lexical score of this function. that's why balance varibale will be availble during return function execution
         deposit: function(amount) {
             balance += amount;
             return balance;
@@ -645,3 +645,476 @@ app.get('/users', getUsersHandler);
 | **Event handlers** | Function Expression |
 | **Object methods** | Function Expression |
 | **IIFE patterns** | Function Expression |
+
+---
+
+## 6. Objects and Prototypes
+
+### Objects in JavaScript vs Java
+
+| Aspect | JavaScript Objects | Java Objects |
+|--------|-------------------|--------------|
+| **Creation** | Object literals `{}` or `new Object()` | Must use `new ClassName()` |
+| **Properties** | Dynamic - can add/remove at runtime | Fixed - defined in class |
+| **Methods** | Functions as properties | Methods defined in class |
+| **Inheritance** | Prototype-based | Class-based |
+| **Type Checking** | Duck typing | Static typing |
+
+### Object Creation Methods:
+
+```javascript
+// 1. Object Literal (most common)
+const user = {
+    name: "John",
+    age: 30,
+    greet: function() {
+        return `Hello, I'm ${this.name}`;
+    }
+};
+
+// 2. Constructor Function
+function User(name, age) {
+    this.name = name;
+    this.age = age;
+    this.greet = function() {
+        return `Hello, I'm ${this.name}`;
+    };
+}
+const user2 = new User("Jane", 25);
+
+// 3. Object.create()
+const userPrototype = {
+    greet: function() {
+        return `Hello, I'm ${this.name}`;
+    }
+};
+const user3 = Object.create(userPrototype);
+user3.name = "Bob";
+user3.age = 35;
+
+// 4. ES6 Classes (syntactic sugar over prototypes)
+class User {
+    constructor(name, age) {
+        this.name = name;
+        this.age = age;
+    }
+    
+    greet() {
+        return `Hello, I'm ${this.name}`;
+    }
+}
+const user4 = new User("Alice", 28);
+```
+
+### What is Prototype Chain?
+
+**Prototype Chain**: When you access a property on an object, JavaScript first looks on the object itself, then on its prototype, then on the prototype's prototype, and so on.
+
+```javascript
+// Every object has a prototype
+const animal = {
+    speak: function() {
+        return "Some sound";
+    }
+};
+
+const dog = Object.create(animal);
+dog.breed = "Labrador";
+dog.bark = function() {
+    return "Woof!";
+};
+
+console.log(dog.breed);  // "Labrador" (own property)
+console.log(dog.speak()); // "Some sound" (inherited from animal)
+console.log(dog.bark());  // "Woof!" (own method)
+```
+
+### Prototype Chain Visualization:
+
+```
+dog object
+├── breed: "Labrador"
+├── bark: function
+└── __proto__ → animal object
+                 ├── speak: function
+                 └── __proto__ → Object.prototype
+                                 ├── toString: function
+                                 ├── valueOf: function
+                                 └── __proto__ → null
+```
+
+### Real-life Example - E-commerce System:
+
+```javascript
+// Base Product prototype
+const Product = {
+    calculateDiscount: function(percentage) {
+        return this.price * (percentage / 100);
+    },
+    
+    getInfo: function() {
+        return `${this.name} - ${this.price}`;
+    }
+};
+
+// Electronics inherits from Product
+const Electronics = Object.create(Product);
+Electronics.calculateWarranty = function(years) {
+    return `${years} year warranty included`;
+};
+
+// Specific phone inherits from Electronics
+const phone = Object.create(Electronics);
+phone.name = "iPhone 15";
+phone.price = 999;
+phone.storage = "128GB";
+
+// Usage
+console.log(phone.getInfo());           // "iPhone 15 - $999" (from Product)
+console.log(phone.calculateDiscount(10)); // 99.9 (from Product)
+console.log(phone.calculateWarranty(2));   // "2 year warranty included" (from Electronics)
+```
+
+### Why Prototypes over Classes?
+
+| Benefit | Explanation |
+|---------|-------------|
+| **Memory Efficiency** | Methods shared across instances |
+| **Dynamic Inheritance** | Can modify prototypes at runtime |
+| **Flexibility** | Mix and match behaviors |
+| **JavaScript Native** | How JavaScript actually works internally |
+
+---
+
+## 7. Arrays and Array Methods
+
+### Arrays in JavaScript vs Java
+
+| Aspect | JavaScript Arrays | Java Arrays |
+|--------|------------------|-------------|
+| **Type** | Dynamic, can hold mixed types | Static, single type |
+| **Size** | Dynamic resizing | Fixed size |
+| **Methods** | Rich set of built-in methods | Limited built-in methods |
+| **Declaration** | `let arr = [1, "hello", true]` | `int[] arr = new int[5]` |
+
+### Essential Array Methods:
+
+#### 1. Mutating Methods (modify original array):
+
+```javascript
+let fruits = ["apple", "banana"];
+
+// Adding elements
+fruits.push("orange");        // ["apple", "banana", "orange"]
+fruits.unshift("mango");      // ["mango", "apple", "banana", "orange"]
+
+// Removing elements
+fruits.pop();                 // ["mango", "apple", "banana"]
+fruits.shift();               // ["apple", "banana"]
+
+// Modifying elements
+fruits.splice(1, 1, "grape"); // ["apple", "grape"] (remove 1 at index 1, add "grape")
+```
+
+#### 2. Non-mutating Methods (return new array):
+
+```javascript
+const numbers = [1, 2, 3, 4, 5];
+
+// Transform each element
+const doubled = numbers.map(n => n * 2);           // [2, 4, 6, 8, 10]
+
+// Filter elements
+const evenNumbers = numbers.filter(n => n % 2 === 0); // [2, 4]
+
+// Reduce to single value
+const sum = numbers.reduce((acc, n) => acc + n, 0);    // 15
+
+// Find elements
+const found = numbers.find(n => n > 3);               // 4
+const foundIndex = numbers.findIndex(n => n > 3);     // 3
+
+// Check conditions
+const hasEven = numbers.some(n => n % 2 === 0);       // true
+const allPositive = numbers.every(n => n > 0);        // true
+```
+
+### Real-life Example - User Management:
+
+```javascript
+const users = [
+    { id: 1, name: "John", age: 30, role: "admin", active: true },
+    { id: 2, name: "Jane", age: 25, role: "user", active: false },
+    { id: 3, name: "Bob", age: 35, role: "user", active: true },
+    { id: 4, name: "Alice", age: 28, role: "admin", active: true }
+];
+
+// Get all active users
+const activeUsers = users.filter(user => user.active);
+
+// Get user names only
+const userNames = users.map(user => user.name);
+
+// Find admin users
+const adminUsers = users.filter(user => user.role === "admin");
+
+// Calculate average age
+const averageAge = users.reduce((sum, user) => sum + user.age, 0) / users.length;
+
+// Check if any user is inactive
+const hasInactiveUsers = users.some(user => !user.active);
+
+// Transform for display
+const userDisplay = users
+    .filter(user => user.active)
+    .map(user => ({
+        displayName: `${user.name} (${user.role})`,
+        canEdit: user.role === "admin"
+    }));
+```
+
+### Method Chaining Pattern:
+
+```javascript
+const result = users
+    .filter(user => user.active)           // Get active users
+    .filter(user => user.age > 25)         // Age filter
+    .map(user => ({                        // Transform data
+        name: user.name,
+        role: user.role.toUpperCase()
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name)); // Sort by name
+```
+
+### Array Methods Comparison Table:
+
+| Method | Returns | Mutates Original | Use Case |
+|--------|---------|------------------|----------|
+| `push/pop` | Length/Element | ✅ Yes | Add/remove from end |
+| `unshift/shift` | Length/Element | ✅ Yes | Add/remove from start |
+| `splice` | Removed elements | ✅ Yes | Insert/remove at position |
+| `map` | New array | ❌ No | Transform elements |
+| `filter` | New array | ❌ No | Select elements |
+| `reduce` | Single value | ❌ No | Aggregate data |
+| `find` | First match | ❌ No | Find element |
+| `some/every` | Boolean | ❌ No | Test conditions |
+
+---
+
+## 8. Template Literals and Destructuring
+
+### Template Literals - Beyond String Concatenation
+
+#### Before Template Literals:
+```javascript
+const name = "John";
+const age = 30;
+const role = "developer";
+
+// Old way - messy concatenation
+const message = "Hello, my name is " + name + ". I'm " + age + " years old and I work as a " + role + ".";
+
+// With newlines - even messier
+const html = "<div class=\"user-card\">\n" +
+             "  <h3>" + name + "</h3>\n" +
+             "  <p>Age: " + age + "</p>\n" +
+             "</div>";
+```
+
+#### With Template Literals:
+```javascript
+const name = "John";
+const age = 30;
+const role = "developer";
+
+// Clean and readable
+const message = `Hello, my name is ${name}. I'm ${age} years old and I work as a ${role}.`;
+
+// Multi-line strings
+const html = `
+    <div class="user-card">
+        <h3>${name}</h3>
+        <p>Age: ${age}</p>
+        <p>Role: ${role}</p>
+    </div>
+`;
+
+// Expressions inside templates
+const greeting = `Hello ${name.toUpperCase()}! You are ${age >= 18 ? 'an adult' : 'a minor'}.`;
+```
+
+### Advanced Template Literal Features:
+
+#### 1. Tagged Template Literals:
+```javascript
+function highlight(strings, ...values) {
+    return strings.reduce((result, string, i) => {
+        const value = values[i] ? `<mark>${values[i]}</mark>` : '';
+        return result + string + value;
+    }, '');
+}
+
+const searchTerm = "JavaScript";
+const text = highlight`Learn ${searchTerm} programming with ${name}`;
+// "Learn <mark>JavaScript</mark> programming with <mark>John</mark>"
+```
+
+#### 2. Real-life Example - SQL Query Builder:
+```javascript
+function buildUserQuery(filters) {
+    const { name, minAge, role } = filters;
+    
+    return `
+        SELECT * FROM users 
+        WHERE 1=1
+        ${name ? `AND name LIKE '%${name}%'` : ''}
+        ${minAge ? `AND age >= ${minAge}` : ''}
+        ${role ? `AND role = '${role}'` : ''}
+        ORDER BY created_at DESC
+    `;
+}
+
+const query = buildUserQuery({ name: "John", minAge: 25 });
+```
+
+### Destructuring - Unpacking Values
+
+#### Array Destructuring:
+```javascript
+const coordinates = [10, 20, 30];
+
+// Old way
+const x = coordinates[0];
+const y = coordinates[1];
+const z = coordinates[2];
+
+// Destructuring way
+const [x, y, z] = coordinates;
+
+// Advanced patterns
+const [first, second, ...rest] = [1, 2, 3, 4, 5];
+// first: 1, second: 2, rest: [3, 4, 5]
+
+// Skipping elements
+const [, , third] = [1, 2, 3, 4, 5];
+// third: 3
+
+// Default values
+const [a = 0, b = 0] = [1];
+// a: 1, b: 0
+```
+
+#### Object Destructuring:
+```javascript
+const user = {
+    id: 1,
+    name: "John",
+    email: "john@example.com",
+    address: {
+        street: "123 Main St",
+        city: "New York"
+    }
+};
+
+// Basic destructuring
+const { name, email } = user;
+
+// Renaming variables
+const { name: userName, email: userEmail } = user;
+
+// Default values
+const { role = "user" } = user;
+
+// Nested destructuring
+const { address: { city, street } } = user;
+
+// Rest operator
+const { id, ...userInfo } = user;
+```
+
+### Real-life Examples:
+
+#### 1. Function Parameters:
+```javascript
+// Instead of accessing props.name, props.age, etc.
+function createUser(props) {
+    return {
+        displayName: props.name,
+        isAdult: props.age >= 18,
+        contact: props.email
+    };
+}
+
+// Use destructuring in parameters
+function createUser({ name, age, email, role = "user" }) {
+    return {
+        displayName: name,
+        isAdult: age >= 18,
+        contact: email,
+        role
+    };
+}
+
+// Usage
+const userData = createUser({ name: "John", age: 30, email: "john@example.com" });
+```
+
+#### 2. API Response Handling:
+```javascript
+// Typical API response
+const apiResponse = {
+    data: {
+        users: [
+            { id: 1, name: "John" },
+            { id: 2, name: "Jane" }
+        ]
+    },
+    status: 200,
+    message: "Success"
+};
+
+// Clean destructuring
+const { 
+    data: { users }, 
+    status, 
+    message 
+} = apiResponse;
+
+// Use the destructured data
+users.forEach(({ id, name }) => {
+    console.log(`User ${id}: ${name}`);
+});
+```
+
+#### 3. React Component Props (common pattern):
+```javascript
+// Instead of props.title, props.content, etc.
+function Card(props) {
+    return `
+        <div class="card">
+            <h3>${props.title}</h3>
+            <p>${props.content}</p>
+        </div>
+    `;
+}
+
+// Destructure props
+function Card({ title, content, className = "card" }) {
+    return `
+        <div class="${className}">
+            <h3>${title}</h3>
+            <p>${content}</p>
+        </div>
+    `;
+}
+```
+
+### Why These Features Matter:
+
+| Feature | Problem Solved | Benefit |
+|---------|----------------|---------|
+| **Template Literals** | String concatenation mess | Clean, readable string building |
+| **Array Destructuring** | Verbose array access | Concise value extraction |
+| **Object Destructuring** | Repetitive property access | Clean parameter handling |
+| **Default Values** | Undefined checks | Safe fallback values |
+| **Rest/Spread** | Manual array/object operations | Flexible data manipulation |
