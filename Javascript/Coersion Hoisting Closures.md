@@ -223,6 +223,19 @@ hoistedVar = "I'm hoisted";
 
 ---
 
+Temporal Dead Zone
+TDZ = "The variable exists but you can't touch it yet"
+Variable is hoisted (JavaScript knows it exists)
+But not initialized (can't access it until declaration line)
+Accessing it throws an error (instead of returning undefined)
+This makes JavaScript more predictable and helps catch bugs early!
+
+Key Differences Summary:
+Variable Type	Hoisted?	Initialized?	TDZ?
+var	✅ Yes	✅ Yes (undefined)	❌ No
+let	✅ Yes	❌ No	✅ Yes
+const	✅ Yes	❌ No	✅ Yes
+
 ## 3. Closures in JavaScript
 
 ### What is the need for Closures?
