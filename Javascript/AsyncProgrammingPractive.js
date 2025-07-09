@@ -107,3 +107,77 @@ async function fetchUserData(id) {
 // No extra wrapping = async just enables the pause/resume behavior
 // Still returns Promise = So other code can await or .then() it
 // You MUST use async when you want to use await - it's a JavaScript syntax requirement, not an extra layer of promises!
+
+
+
+
+
+
+//////////////// PROMISE runs constructor items immediately ///////////////////////
+//////////////// await pauses execution of the function where await is added //////
+
+console.log("1. Before Promise");
+
+const myPromise = new Promise((resolve) => {
+    console.log("2. Promise constructor runs immediately");
+    setTimeout(() => {
+        console.log("5. Inside setTimeout callback");
+        resolve("done");
+        console.log("6. After resolve call");
+    }, 1000);
+    console.log("3. After setTimeout setup");
+});
+
+myPromise.then((result) => {
+    console.log("7. Inside .then():", result);
+}).catch((error) => {
+    console.log("Inside .catch():", error);
+});
+
+console.log("4. Next item - this prints immediately!");
+
+// Output:
+// 1. Before Promise
+// 2. Promise constructor runs immediately
+// 3. After setTimeout setup
+// 4. Next item - this prints immediately!
+// [1 second later...]
+// 5. Inside setTimeout callback
+// 6. After resolve call
+// 7. Inside .then(): done
+
+
+
+
+
+
+async function test() {
+    console.log("1. Before await");
+
+    const result = await new Promise((resolve) => {
+        console.log("2. Promise constructor runs immediately");
+        setTimeout(() => {
+            console.log("4. Inside setTimeout callback");
+            resolve("done");
+            console.log("5. After resolve call");
+        }, 1000);
+        console.log("3. After setTimeout (but before timeout executes)");
+    });
+
+    console.log("6. After await:", result);
+}
+
+console.log("0. Before calling test");
+test();
+console.log("7. After calling test");
+
+// Output:
+// 0. Before calling test
+// 1. Before await
+// 2. Promise constructor runs immediately
+// 3. After setTimeout (but before timeout executes)
+// 7. After calling test
+// [1 second later...]
+// 4. Inside setTimeout callback
+// 5. After resolve call
+// 6. After await: done

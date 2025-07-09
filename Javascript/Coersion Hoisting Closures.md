@@ -38,7 +38,7 @@ String result = "5" + 3; // Compiler knows: string concatenation
 ```
 
 ### Why do we need Coercion?
-
+Type coercion is JavaScript's automatic conversion of values from one data type to another during operations or comparisons.
 **Purpose:**
 - JavaScript is dynamically typed, allowing flexible operations between different types
 - Enables seamless mixing of data types without explicit casting
@@ -298,6 +298,47 @@ account.withdraw(200);   // 1300
 // account.balance = 0;  // Can't access private balance!
 ```
 
+
+```
+function Person(name) {
+    this.name = name;
+    let secretCode = "123ABC"; // Private variable
+    
+    this.revealSecret = function() {
+        console.log(secretCode); // TRUE closure - accesses private var
+    };
+}
+
+const person1 = new Person("John");
+person1.revealSecret(); // "123ABC"
+console.log(person1.secretCode); // undefined - truly private!
+```
+
+
+'this' keyword for variable is slighthly against closure concept, because it closures is defined for private variables to be accessible in outside score.
+But with 'this' keyword provides context of variable to child objects. //Ankit theory//
+```
+function Person(name) {
+    this.name = name;
+    this.age = 12;
+    
+    this.greet = function() {
+        console.log(`Hi, I'm ${this.name} and I'm ${this.age}`);
+    };
+}
+
+const person1 = new Person("John");
+
+// These all work outside the constructor:
+console.log(person1.name);  // "John"
+console.log(person1.age);   // 12
+person1.greet();            // "Hi, I'm John and I'm 12"
+
+// You can even modify them:
+person1.age = 25;
+console.log(person1.age);   // 25
+
+```
 #### 2. Function Factories:
 ```javascript
 // Creating specialized functions
@@ -416,6 +457,29 @@ function authenticate(user) {
     console.log(sessionId);   // ReferenceError - doesn't exist outside block
     console.log(permissions); // ReferenceError - doesn't exist outside block
 }
+```
+
+Type error in case of variable assigned a function and called before impl;
+```
+// Function declarations - fully hoisted
+console.log(test());      // Works! Prints "hello"
+function test() {
+    return "hello";
+}
+
+// var - hoisted but undefined
+console.log(x);           // undefined (not error)
+var x = 5;
+
+// let/const - hoisted but in TDZ
+console.log(y);           // ReferenceError
+let y = 10;
+
+// Function expressions - not hoisted
+console.log(fn());        // TypeError: fn is not a function
+var fn = function() {
+    return "hi";
+};
 ```
 
 ### Step-by-step Execution:
@@ -543,7 +607,10 @@ function createButtonsFixed() {
         }, 100);
     }
     // i is NOT accessible here: console.log(i); // ReferenceError
+    // Each iteration creates NEW variable 'i'
 }
+
+var creates one variable for entire function, let creates new variable per block iteration.
 ```
 
 ### Summary Table:
