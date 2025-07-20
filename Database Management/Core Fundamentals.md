@@ -138,10 +138,92 @@ COMMIT; -- At this point, changes are guaranteed to survive crashes
 ```
 
 **How it works**:
-- Before COMMIT returns success, data is written to disk (not just memory)
-- Write-Ahead Logging (WAL): Changes logged to disk before data pages updated
-- On restart after crash, database replays logs to restore committed transactions
-- Customer's order and payment are intact even though server crashed
+
+**Memory vs Disk - The Key Distinction**:
+
+**What "Database" Actually Means**:
+- **Database files** live on disk (your .db files, data directories)
+- **Database engine** loads data into RAM for fast processing
+- When you "write to database," you're usually updating the **in-memory copy**
+- "Writing to disk" means **persisting to physical storage files**
+
+**Example**:
+```
+Your order table physically stored as: /var/lib/mysql/orders.ibd (on disk)
+When you query it: Database loads relevant pages into RAM
+When you UPDATE: Change happens in RAM first (for speed)
+Later: Database flushes RAM changes back to disk files
+```
+
+**The Write Process Explained**:
+```
+1. Transaction starts → Changes made in memory (fast)
+2. COMMIT called → Transaction log written to DISK first (WAL)
+3. COMMIT returns "success" → Now guaranteed durable
+4. Later → Actual data pages written to disk (can be async)
+```
+
+**Write-Ahead Logging (WAL) in Detail**:
+- **What gets logged**: "User 123 transferred $100 from Account A to Account B at timestamp X"
+- **Log written to disk**: This log entry is **forced to disk** before COMMIT succeeds
+- **Data pages updated later**: The actual account balance changes can be written to disk asynchronously
+
+**What "Database Replays Logs" Means**:
+
+**Why Order Status Could Still Be 'Pending' After 1 Second**:
+
+**The WAL Guarantee**:
+- COMMIT only guarantees the **LOG** is written to disk
+- The **actual data pages** (where order status lives) might still be in memory
+- Database flushes memory to disk **later** for performance (could be seconds or minutes)
+
+**Timeline**:
+```
+T1: UPDATE orders SET status = 'paid' → Change made in RAM
+T2: COMMIT → Log "Order 1001 set to paid" written to DISK ✓
+T3: COMMIT returns success → Customer sees confirmation
+T4: Server crashes → RAM is lost, disk files might still show 'pending'
+T5: Restart → Database reads log, sees "Order 1001 set to paid"
+T6: Replay → Updates disk files to match committed state
+```
+
+**During normal operation**:
+```
+RAM: Order 1001 status = 'paid' 
+Disk Log: "Set Order 1001 to 'paid'" ✓ (guaranteed written)
+Disk Data Files: Order 1001 status = 'pending' (not yet flushed)
+```
+
+**After crash and restart**:
+```
+1. Database reads transaction logs from disk
+2. Sees: "Order 1001 set to 'paid' was committed"
+3. Checks current disk data files: Order 1001 status = 'pending'
+4. "Replays" the transaction: Updates disk files to status = 'paid'
+5. Database state now matches what was committed
+```
+
+**Real Example - Why This Matters**:
+```sql
+-- Customer pays for order
+UPDATE accounts SET balance = balance - 100 WHERE id = 'customer';
+UPDATE orders SET status = 'paid' WHERE id = 1001;
+COMMIT; -- Returns success to customer
+
+-- Server crashes 1 second later
+-- RAM lost, but disk log has: "Order 1001 paid, customer charged $100"
+-- Disk data files might still show: Order status = 'pending'
+-- On restart:
+-- 1. Database finds log: "Order 1001 paid, customer charged $100"
+-- 2. Checks disk data files: Order status = 'pending' 
+-- 3. Replays: Updates disk files to status = 'paid'
+-- 4. Customer's payment is honored, order is fulfilled
+```
+
+**Why Not Just Write Data Directly to Disk?**:
+- **Performance**: Writing scattered data pages to disk is slow
+- **Efficiency**: Logs are sequential writes (much faster than random writes)
+- **Reliability**: Logs can be written even if data pages are corrupted
 
 **Implementation**: Write-ahead logging, disk-based storage, replication
 
