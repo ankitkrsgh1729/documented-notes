@@ -220,6 +220,77 @@ COMMIT; -- Returns success to customer
 -- 4. Customer's payment is honored, order is fulfilled
 ```
 
+**Normal Operation (No Crash) - When Are Logs Read?**
+
+**Timeline of Normal Database Operation**:
+```
+T1: UPDATE orders SET status = 'paid' → Change in RAM
+T2: COMMIT → Log written to disk immediately
+T3: COMMIT returns success → Customer sees confirmation
+T4: Database continues normal operation...
+T5: (Later) Background process flushes data pages to disk
+T6: (Even later) Log cleanup/truncation happens
+```
+
+**When Logs Are Read During Normal Operation**:
+
+**1. Database Replication**:
+```
+Master DB: Writes transaction logs
+Slave DB: Continuously reads master's logs to stay in sync
+```
+
+**2. Point-in-Time Recovery**:
+```sql
+-- Admin wants to restore database to 2PM yesterday
+-- Database reads logs from backup + all logs since backup
+-- Replays transactions up to exactly 2PM
+```
+
+**3. Database Checkpointing**:
+```
+Every few minutes:
+1. Database flushes dirty pages from memory to disk
+2. Marks corresponding log entries as "safe to delete"
+3. Truncates old log entries (they're no longer needed)
+```
+
+**4. Monitoring and Auditing**:
+```
+-- DBA wants to see what transactions happened today
+SELECT * FROM transaction_logs WHERE timestamp > '2025-07-20';
+```
+
+**Log Lifecycle Example**:
+```
+T1: Order 1001 paid → Log written: "Order 1001 status=paid"
+T2-T10: Log sits on disk, data still in memory
+T11: Checkpoint process flushes order data to disk files
+T12: Log entry for Order 1001 marked as "can be cleaned"
+T13: Log cleanup removes old entries (they're now redundant)
+```
+
+**Real-World Example - E-commerce During Normal Day**:
+```
+9:00 AM: Customer orders laptop → Log: "Order 2001 created"
+9:01 AM: Payment processed → Log: "Payment 5001 processed"
+9:05 AM: Inventory updated → Log: "Product 456 quantity-1"
+...
+10:00 AM: Checkpoint runs → All 9 AM data flushed to disk
+10:01 AM: Logs from 9:00-9:30 AM can be safely deleted
+11:00 AM: Slave database reads recent logs to sync up
+2:00 PM: DBA runs audit query reading logs for compliance
+```
+
+**Why Logs Are Eventually Deleted**:
+- **Space**: Log files would grow infinitely without cleanup
+- **Performance**: Smaller logs = faster recovery when crashes do happen
+- **Storage Cost**: Old logs can be archived to cheaper storage
+
+**Key Insight**: Logs serve **dual purposes**:
+1. **Crash recovery** (main purpose)
+2. **Operational tasks** during normal operation (replication, auditing, etc.)
+
 **Why Not Just Write Data Directly to Disk?**:
 - **Performance**: Writing scattered data pages to disk is slow
 - **Efficiency**: Logs are sequential writes (much faster than random writes)
