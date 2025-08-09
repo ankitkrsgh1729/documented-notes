@@ -841,8 +841,74 @@ public class LegacyAccountService {
     }
 }
 ```
+# Leader Election Pattern
+
+## Overview
+Leader Election is a design pattern used in distributed systems to select one node (instance) as the **leader** among a group of nodes.  
+The leader is responsible for performing certain critical tasks, while the others act as followers or backups.  
+If the leader fails, a new leader is elected automatically.
+
+**Goals:**
+- Avoid duplicate work in distributed systems.
+- Ensure high availability.
+- Provide automatic failover.
 
 ---
+
+## When to Use
+- Distributed job schedulers (only one instance runs the job at a time).
+- Master node election in databases or cluster managers.
+- Primary service node selection in microservices.
+- IoT network coordinator election.
+
+---
+
+## Key Approaches
+1. **ZooKeeper / etcd / Consul based election** – Coordination service handles leader selection.
+2. **Database-based election** – Using a DB lock or flag to determine the leader.
+3. **In-memory election** (e.g., Hazelcast) – Suitable for small clusters.
+
+---
+
+## Example: Java + Apache Curator (ZooKeeper)
+
+```java
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.recipes.leader.LeaderSelector;
+import org.apache.curator.framework.recipes.leader.LeaderSelectorListenerAdapter;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+
+public class DistributedLeaderElection {
+    private static final String ZK_ADDRESS = "localhost:2181";
+    private static final String LEADER_PATH = "/app/leader";
+
+    public static void main(String[] args) throws Exception {
+        CuratorFramework client = CuratorFrameworkFactory.newClient(
+                ZK_ADDRESS, new ExponentialBackoffRetry(1000, 3));
+        client.start();
+
+        LeaderSelector selector = new LeaderSelector(client, LEADER_PATH,
+                new LeaderSelectorListenerAdapter() {
+                    @Override
+                    public void takeLeadership(CuratorFramework client) {
+                        System.out.println("I am the leader! Running critical task...");
+                        try {
+                            Thread.sleep(5000); // Simulate leader task
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        System.out.println("Releasing leadership...");
+                    }
+                });
+
+        selector.autoRequeue(); // Re-enter election after losing leadership
+        selector.start();
+
+        Thread.sleep(Long.MAX_VALUE); // Keep application running
+    }
+}
+```
 
 ## INTERVIEW SUCCESS TIPS
 
