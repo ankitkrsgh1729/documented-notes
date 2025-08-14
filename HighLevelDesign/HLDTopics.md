@@ -337,6 +337,21 @@ A cache stores copies of frequently accessed data in fast storage (memory) to re
 - **TTL** — time-based expiry
 - **Size-based** — evict when memory exceeds limit
 
+## Detailed Comparison
+
+| Aspect | Cache-Aside | Write-Through | Write-Behind |
+|--------|-------------|---------------|--------------|
+| **Write responsibility** | App writes to DB, then manages cache | Cache system writes to both cache and DB | Cache system writes to cache, then DB async |
+| **Read performance** | Fast after cache is populated | Fast (always in cache) | Fast (always in cache) |
+| **Write performance** | Fast (only DB write) | Slower (synchronous dual write) | Fastest (async DB write) |
+| **Data consistency** | Eventually consistent | Strong consistency | Eventually consistent |
+| **Complexity** | Higher (app manages cache) | Lower (cache handles it) | Medium (async handling needed) |
+| **Cache population** | Lazy (on first read) | Eager (on every write) | Eager (on every write) |
+| **Cache miss handling** | App loads from DB | Cache loads from DB | Cache loads from DB |
+| **Failure handling** | Cache failures don't block DB ops | Cache failure can block writes | Risk of data loss if cache fails |
+| **Memory usage** | Efficient (only cached on demand) | Higher (all written data cached) | Higher (all written data cached) |
+
+
 ### Java Examples
 
 #### Cache-Aside (Spring + Caffeine example)
