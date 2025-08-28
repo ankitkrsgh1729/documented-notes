@@ -68,6 +68,118 @@ app.listen(8080);
 - Want centralized policies across all services
 - Complex routing requirements
 
+
+# JWT Token Validation & JWKS - Quick Notes
+
+## How API Gateway Validates JWT Tokens
+
+### ❌ **What API Gateway Does NOT Do**
+- Does not create/store JWT tokens for comparison
+- Does not recreate tokens
+
+### ✅ **What API Gateway Actually Does**
+- **Cryptographic verification** using public key
+- **Claims validation** (exp, iss, aud, etc.)
+- **Stateless validation** - no token storage needed
+
+## JWT Signing Algorithms
+
+### 1. **RSA (Asymmetric) - RS256**
+```
+Auth Server: Signs JWT with PRIVATE key
+API Gateway: Verifies JWT with PUBLIC key
+```
+
+### 2. **HMAC (Symmetric) - HS256**
+```
+Auth Server: Signs JWT with SHARED SECRET
+API Gateway: Verifies JWT with SAME SHARED SECRET
+```
+
+### Key Differences
+- **RSA**: Different keys for signing/verification (more secure for distributed systems)
+- **HMAC**: Same secret for both operations (simpler but less secure for multi-service)
+
+## What is HMAC?
+
+**HMAC = Hash-based Message Authentication Code**
+
+### How HMAC Works
+- Uses a **shared secret key** + **hashing algorithm** (usually SHA-256)
+- Creates a unique signature that can only be generated/verified with the secret
+- Formula: `HMAC = Hash(secret + message + secret)`
+
+### HMAC in JWT (HS256)
+```
+JWT Signature = HMAC-SHA256(secret, header.payload)
+```
+
+### Security Consideration
+- **Risk**: If any service has the secret, it can create valid tokens
+- **Better for**: Single application or trusted internal services
+- **Worse for**: Distributed systems where you want read-only verification
+
+**JWKS = JSON Web Key Set**
+
+### What It Is
+- Standardized endpoint publishing public keys
+- URL: `https://auth-domain/.well-known/jwks.json`
+
+### Sample JWKS Response
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig", 
+      "kid": "abc123",
+      "n": "base64-public-key",
+      "e": "AQAB"
+    }
+  ]
+}
+```
+
+## Validation Flows
+
+### RSA (RS256) Flow
+```
+1. Client → JWT → API Gateway
+2. API Gateway extracts 'kid' from JWT header
+3. API Gateway → GET /.well-known/jwks.json
+4. Find matching public key using 'kid'
+5. Verify signature with public key
+6. Valid? → Forward | Invalid? → 401/403
+```
+
+### HMAC (HS256) Flow  
+```
+1. Client → JWT → API Gateway
+2. API Gateway uses pre-configured shared secret
+3. Recreate signature: HMAC-SHA256(secret, header.payload)
+4. Compare with JWT signature
+5. Match? → Forward | No match? → 401/403
+```
+
+## Why This Design Works
+
+### Security
+- Private key never exposed
+- Public key safe to share
+- Automatic key rotation via JWKS
+
+### Scalability  
+- Stateless validation
+- No auth server calls per request
+- Distributed verification across services
+
+---
+
+**Key Takeaway**: JWTs are self-contained and cryptographically verifiable without server-side storage!
+
+
+
+
 ## How API Gateway Actually Works
 
 ### 1. Code Execution Reality
