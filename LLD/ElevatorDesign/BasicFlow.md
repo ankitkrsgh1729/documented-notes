@@ -264,93 +264,150 @@ void moveToFloor(int targetFloor) {
 }
 ```
 
-## 🎨 Design Patterns Applied to Our Core System
+## 🎨 Design Patterns in Our Core Implementation
 
-### 1. **Strategy Pattern** - Swappable Elevator Selection
+### 1. **Strategy Pattern** - Multiple Selection Algorithms (Optional Enhancement)
 ```java
-// Makes our assignElevator() method flexible
-interface ElevatorSelectionStrategy {
-    Elevator selectBestElevator(List<Elevator> elevators, Request request);
-}
+// Our assignElevator() already IS a strategy implementation!
+// If interviewer asks "How would you support different selection algorithms?"
 
-class CostBasedStrategy implements ElevatorSelectionStrategy {
-    public Elevator selectBestElevator(List<Elevator> elevators, Request request) {
-        // Our cost calculation from Phase 2
-        return findMinCostElevator(elevators, request);
-    }
-}
-
-// Usage in ElevatorController
 class ElevatorController {
-    private ElevatorSelectionStrategy strategy;
+    private String selectionMode = "COST_BASED"; // Default
     
     int assignElevator(Request request) {
-        Elevator best = strategy.selectBestElevator(elevators, request);
-        best.addRequest(request);  // Uses our queue logic from Phase 2
-        return best.getId();
+        switch(selectionMode) {
+            case "COST_BASED":
+                return assignByCost(request);           // Our current implementation
+            case "NEAREST_FIRST": 
+                return assignByDistance(request);       // Alternative strategy
+            case "ROUND_ROBIN":
+                return assignByRotation(request);       // Another alternative
+        }
+    }
+    
+    // Our original method - this IS the cost-based strategy
+    private int assignByCost(Request request) {
+        // Our exact implementation from Phase 2
+        Elevator bestElevator = null;
+        int minCost = Integer.MAX_VALUE;
+        
+        for (Elevator elevator : elevators) {
+            int cost = calculateCost(elevator, request);
+            if (cost < minCost) {
+                minCost = cost;
+                bestElevator = elevator;
+            }
+        }
+        return bestElevator.getId();
     }
 }
 ```
 
-### 2. **State Pattern** - Enhanced Direction Management
+### 2. **State Pattern** - Our getNextFloor() IS State Management
 ```java
-// Our Direction enum from Phase 1
-enum Direction { UP, DOWN, IDLE }
+// Our getNextFloor() method already implements State pattern!
+// Each Direction value represents a state, and we behave differently
 
-// Our getNextFloor() method IS the state management
 int getNextFloor() {
-    switch(currentDirection) {
-        case UP -> return processUpDirection();      // Continue UP journey
-        case DOWN -> return processDownDirection();  // Continue DOWN journey  
-        case IDLE -> return processIdleState();     // Pick any request
+    // State: IDLE - pick any available request
+    if (currentDirection == IDLE) {
+        if (!upRequests.isEmpty()) {
+            currentDirection = UP;    // Transition to UP state
+            return upRequests.poll();
+        } else if (!downRequests.isEmpty()) {
+            currentDirection = DOWN;  // Transition to DOWN state  
+            return downRequests.poll();
+        }
+        return -1;
     }
-}
-
-// These methods use our queue logic from Phase 2
-private int processUpDirection() {
-    if (!upRequests.isEmpty()) return upRequests.poll();
-    // Switch to DOWN, process pending - exactly our LOOK algorithm
-    currentDirection = DOWN;
-    processPendingRequests();
-    return downRequests.isEmpty() ? -1 : downRequests.poll();
+    
+    // State: UP - continue upward until exhausted
+    else if (currentDirection == UP) {
+        if (!upRequests.isEmpty()) {
+            return upRequests.poll(); // Stay in UP state
+        } else {
+            // State transition: UP → DOWN
+            currentDirection = DOWN;
+            processPendingRequests();
+            return downRequests.isEmpty() ? -1 : downRequests.poll();
+        }
+    }
+    
+    // State: DOWN - continue downward until exhausted  
+    else { // currentDirection == DOWN
+        if (!downRequests.isEmpty()) {
+            return downRequests.poll(); // Stay in DOWN state
+        } else {
+            // State transition: DOWN → UP
+            currentDirection = UP;
+            processPendingRequests();
+            return upRequests.isEmpty() ? -1 : upRequests.poll();
+        }
+    }
 }
 ```
 
-### 3. **Observer Pattern** - Building Notifications
+### 3. **Observer Pattern** - Notify Building Components
 ```java
-// Extends our Building class from Phase 1
+// When elevator reaches a floor, notify building systems
+interface ElevatorObserver {
+    void onFloorReached(int elevatorId, int floor);
+    void onDoorsOpened(int elevatorId);
+}
+
 class Building implements ElevatorObserver {
+    // Our core methods from Phase 1
     public int requestElevator(int floor, Direction direction) {
-        // Our Phase 1 implementation
         Request request = new Request(floor, -1, direction, EXTERNAL);
         return controller.assignElevator(request);
     }
     
-    // Observer methods using our core data
+    // Observer implementation - gets notified by elevators
     public void onFloorReached(int elevatorId, int floor) {
-        // Reset floor buttons, update displays
-        // Uses our elevator selection and queue processing results
+        // Turn off floor button lights
+        floorButtons[floor].setLightOff();
+        // Update floor displays
+        updateFloorDisplay(elevatorId, floor);
     }
+    
+    public void onDoorsOpened(int elevatorId) {
+        // Allow passengers to enter/exit
+        // Reset internal elevator buttons
+    }
+}
+
+// In our moveToFloor() method:
+void moveToFloor(int targetFloor) {
+    currentFloor = targetFloor;
+    // Notify observers - this triggers Building's onFloorReached()
+    notifyObservers(elevatorId, currentFloor);
 }
 ```
 
-### 4. **Command Pattern** - Request Processing
+### 4. **Command Pattern** - Our Request Class Already Is One!
 ```java
-// Our Request class from Phase 1 becomes a Command
-abstract class Request {
-    abstract void execute(Elevator elevator);
-}
-
-class InternalRequest extends Request {
+// Our Request from Phase 1 can be enhanced to be executable
+class Request {
+    int sourceFloor;
+    int destinationFloor;
+    Direction direction;
+    RequestType type;
+    
+    // Command pattern - encapsulates the action to be performed
     void execute(Elevator elevator) {
-        elevator.addInternalRequest(destinationFloor);  // Uses Phase 2 logic
+        if (type == EXTERNAL) {
+            elevator.addExternalRequest(this);  // Uses our queue logic
+        } else {
+            elevator.addInternalRequest(destinationFloor);
+        }
     }
 }
 
-class ExternalRequest extends Request {
-    void execute(Elevator elevator) {
-        elevator.addExternalRequest(this);  // Uses Phase 2 queue assignment
-    }
+// Usage in our assignElevator():
+int assignElevator(Request request) {
+    Elevator bestElevator = findBestElevator(request);
+    request.execute(bestElevator);  // Command executes itself
+    return bestElevator.getId();
 }
 ```
 
