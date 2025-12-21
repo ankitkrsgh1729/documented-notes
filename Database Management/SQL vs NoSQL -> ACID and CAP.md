@@ -370,6 +370,89 @@ Master fails? Everything stops! Need manual intervention.
 
 ## 4. ACID vs CAP in SQL vs NoSQL
 
+### What is ACID? (Single Node Transaction Guarantees)
+
+**ACID = Rules for how ONE database handles transactions**
+- **Applies to:** Single database server (or single shard within a distributed system)
+- **About:** Data integrity and correctness within that node
+- **Scope:** Individual transactions on one node
+- **Question it answers:** "Is my data correct on this server?"
+
+```
+A = Atomicity: All-or-nothing (all operations succeed or all fail)
+C = Consistency: Business rules never violated (constraints, triggers)
+I = Isolation: Concurrent transactions don't interfere
+D = Durability: Committed data survives crashes
+```
+
+### What is CAP? (Distributed System Trade-offs)
+
+**CAP = Choices when you have MULTIPLE database nodes communicating over network**
+- **Applies to:** Distributed systems (2+ servers)
+- **About:** Trade-offs during network failures between nodes
+- **Scope:** Data synchronization across different nodes
+- **Question it answers:** "What happens when my servers can't talk to each other?"
+
+```
+C = Consistency: All nodes see the same data at the same instant
+A = Availability: Every request gets a response (not an error)
+P = Partition Tolerance: System continues when network fails
+
+Theorem: During a network partition, choose either C or A
+         (P is mandatory - partitions will happen)
+```
+
+### Critical Difference Between ACID-C and CAP-C:
+
+```
+ACID Consistency (Business Rules):
+"My data follows the rules I defined"
+Examples:
+- Balance can't be negative
+- Foreign key must exist
+- Email must be unique
+- Age must be between 0-150
+
+CAP Consistency (Replica Synchronization):
+"All my servers show the exact same data right now"
+Examples:
+- Server 1 shows balance = $100
+- Server 2 shows balance = $100
+- Server 3 shows balance = $100
+- All at the SAME moment in time
+
+Key Insight:
+ACID = Correctness within ONE node
+CAP = Synchronization across MULTIPLE nodes
+
+You can have ACID without CAP (single database server)
+You can have CAP without ACID (distributed key-value store)
+```
+
+### Visual Comparison:
+
+```
+ACID Consistency:
+┌─────────────────┐
+│  Single Server  │
+│                 │
+│  Balance: $100  │ ← Must follow rules:
+│  Rule: >= $0    │    - Never negative ✓
+└─────────────────┘    - Withdrawals atomic ✓
+                       - Constraints enforced ✓
+
+CAP Consistency:
+┌──────────┐  ┌──────────┐  ┌──────────┐
+│ Server A │  │ Server B │  │ Server C │
+│ Bal: $100│  │ Bal: $100│  │ Bal: $100│
+└──────────┘  └──────────┘  └──────────┘
+     ↑             ↑             ↑
+All three show SAME value at SAME time ✓
+
+ACID = "Is this number valid?"
+CAP = "Do all servers agree on the number?"
+```
+
 ### SQL Databases (ACID Focus)
 
 ```
@@ -681,4 +764,5 @@ Both are correct choices - depends on your use case!
 "No joins + eventual consistency + auto-sharding = easy distribution"
 
 **ACID vs CAP:**
+"ACID = correctness on one node, CAP = sync across many nodes"
 "SQL says 'correct or nothing', NoSQL says 'something is better than nothing'"
