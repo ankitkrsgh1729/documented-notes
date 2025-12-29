@@ -1,3 +1,4 @@
+# Deprecated Design
 # News Feed System Design - Complete Guide
 
 ## System Overview & Requirements
