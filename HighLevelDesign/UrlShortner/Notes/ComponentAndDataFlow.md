@@ -1,6 +1,6 @@
 # URL Shortener - Part 2: Architecture & Design
 
-**Navigation**: [← Part 1: Requirements & Capacity](NonFunctionalReq)
+**Navigation**: [← NonFunctionalReq](NonFunctionalReq)
 
 ---
 
@@ -330,4 +330,4 @@ A: Built-in replication/persistence, rich data structures, single-threaded but h
 
 ---
 
-**Navigation**: [← Part 1: Requirements & Capacity](NonFunctionalReq)
+**Navigation**: [← NonFunctionalReq](NonFunctionalReq)

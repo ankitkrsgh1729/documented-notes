@@ -1,6 +1,6 @@
 # URL Shortener - Part 1: Requirements & Capacity
 
-**Navigation**: [Part 2: Architecture & Design →](ComponentAndDataFlow)
+**Navigation**: [ComponentAndDataFlow →](ComponentAndDataFlow)
 
 ---
 
@@ -135,4 +135,4 @@
 
 ---
 
-**Next**: [Part 2: Architecture & Design →](ComponentAndDataFlow)
+**Next**: [ComponentAndDataFlow →](ComponentAndDataFlow)
