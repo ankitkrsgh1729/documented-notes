@@ -1,6 +1,6 @@
 # URL Shortener - Part 1: Requirements & Capacity
 
-**Navigation**: [ComponentAndDataFlow →](ComponentAndDataFlow)
+**Navigation**: [ComponentAndDataFlow →](ComponentAndDataFlow.md)
 
 ---
 
@@ -135,4 +135,4 @@
 
 ---
 
-**Next**: [ComponentAndDataFlow →](ComponentAndDataFlow)
+**Next**: [ComponentAndDataFlow →](ComponentAndDataFlow.md)
