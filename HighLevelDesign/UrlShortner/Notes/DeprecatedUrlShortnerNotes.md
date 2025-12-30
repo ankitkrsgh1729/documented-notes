@@ -1,3 +1,4 @@
+# Deprecated Design
 # URL Shortener Architecture - Detailed Component Explanation
 
 ## 1. Client-Facing Layer
