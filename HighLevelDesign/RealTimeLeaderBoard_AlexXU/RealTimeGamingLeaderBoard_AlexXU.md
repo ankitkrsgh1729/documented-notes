@@ -588,4 +588,431 @@ Example routing:
    │                                      │
    │  ┌──────┐  ┌──────┐  ┌──────┐      │
    │  │Node 0│←→│Node 1│←→│Node 2│      │
-   │  │Slots │  │Slots │  
+   │  │Slots │  │Slots │  │Slots │      │
+   │  │0-5460│  │5461- │  │10923-│      │
+   │  │      │  │10922 │  │16383 │      │
+   │  └──────┘  └──────┘  └──────┘      │
+   │                                      │
+   │  Each node handles 1/3 of data       │
+   │  Automatic routing & rebalancing     │
+   │  Built-in failover support           │
+   └──────────────────────────────────────┘
+```
+
+---
+
+## 9. Sharding vs Read Replicas - Critical Differences
+
+### Understanding the Fundamental Difference
+
+**These are COMPLETELY DIFFERENT concepts that solve different problems:**
+
+```
+SHARDING = Horizontal Partitioning (Split data across machines)
+REPLICATION = Copying data (Duplicate data across machines)
+```
+
+---
+
+### 3 Shards (Horizontal Partitioning)
+
+**Data Distribution:**
+```
+┌─────────────────────────────────────────────────────────┐
+│                    All User Data                        │
+│            (100% of leaderboard entries)                │
+└─────────────────────────────────────────────────────────┘
+                          │
+                 Split into 3 parts
+                          │
+         ┌────────────────┼────────────────┐
+         ▼                ▼                ▼
+    ┌────────┐       ┌────────┐      ┌────────┐
+    │Shard 0 │       │Shard 1 │      │Shard 2 │
+    │33% data│       │33% data│      │33% data│
+    │        │       │        │      │        │
+    │Users:  │       │Users:  │      │Users:  │
+    │- mary  │       │- john  │      │- alice │
+    │- bob   │       │- sarah │      │- tom   │
+    └────────┘       └────────┘      └────────┘
+    Machine 1        Machine 2        Machine 3
+    10.0.1.1         10.0.1.2         10.0.1.3
+    
+    ✅ Different physical machines
+    ✅ Different IP addresses
+    ✅ NO data overlap
+```
+
+**Purpose**: Increase **total system capacity**
+
+**Capacity Gains:**
+- **Storage**: 3x capacity (each holds 33%)
+- **Write QPS**: 3x throughput (writes distributed)
+- **Read QPS**: 3x throughput (reads distributed)
+- **Memory**: 3x total memory
+
+**Key Characteristic**: Each shard holds **DIFFERENT data**
+
+**How Writes Work:**
+```python
+# User "mary" → hash(mary) % 3 = 0 → Goes to Shard 0
+# User "john" → hash(john) % 3 = 1 → Goes to Shard 1
+# User "alice" → hash(alice) % 3 = 2 → Goes to Shard 2
+
+# Each write goes to ONE shard only
+UPDATE_SCORE("mary", 100)  # → Shard 0 only
+UPDATE_SCORE("john", 200)  # → Shard 1 only
+UPDATE_SCORE("alice", 300) # → Shard 2 only
+```
+
+**How Reads Work:**
+```python
+# Reading specific user: Query ONE shard
+GET_RANK("mary")  # → Query Shard 0 only
+
+# Reading Top 10: Must query ALL shards
+GET_TOP_10()  # → Query Shard 0, 1, 2 → Merge results
+```
+
+---
+
+### 3 Read Replicas (Replication) [Only to help understand the difference between sharding and replication | Not related to current leaderboard design]
+
+**Data Distribution:**
+```
+┌─────────────────────────────────────────────────────────┐
+│                Master (Primary)                         │
+│              100% of all user data                      │
+│              Handles ALL writes                         │
+│         mary, john, alice, bob, sarah, tom...           │
+└────────────────────┬────────────────────────────────────┘
+                     │
+         ┌───────────┼───────────┐
+         │ Async     │ Async     │ Async
+         │ Repl.     │ Repl.     │ Repl.
+         ▼           ▼           ▼
+    ┌────────┐  ┌────────┐  ┌────────┐
+    │Replica1│  │Replica2│  │Replica3│
+    │100%    │  │100%    │  │100%    │
+    │data    │  │data    │  │data    │
+    │        │  │        │  │        │
+    │All     │  │All     │  │All     │
+    │users   │  │users   │  │users   │
+    │Read    │  │Read    │  │Read    │
+    │only    │  │only    │  │only    │
+    └────────┘  └────────┘  └────────┘
+    Machine 2    Machine 3    Machine 4
+    10.0.2.1     10.0.2.2     10.0.2.3
+    
+    ✅ Same data on all nodes
+    ✅ Different physical machines
+    ✅ 100% data overlap
+```
+
+**Purpose**: Increase **read throughput** and **high availability**
+
+**Capacity Gains:**
+- **Storage**: Same (1x, replicated not expanded)
+- **Write QPS**: Same (all writes go to master)
+- **Read QPS**: 4x throughput (1 master + 3 replicas)
+- **Memory**: Same per node (4x total but redundant)
+
+**Key Characteristic**: Each replica holds **IDENTICAL data**
+
+**How Writes Work:**
+```python
+# ALL writes go to master, then replicated
+
+UPDATE_SCORE("mary", 100)  # → Master only
+# Then async replication:
+#   Master → Replica 1 (copy)
+#   Master → Replica 2 (copy)
+#   Master → Replica 3 (copy)
+
+# Master handles ALL 2,500 writes/sec
+```
+
+**How Reads Work:**
+```python
+# Reads can go to ANY node (master or replicas)
+
+GET_RANK("mary")  # → Can query Master OR Replica1 OR Replica2 OR Replica3
+                  # Load balancer distributes reads
+
+GET_TOP_10()      # → Query ONE node (has all data)
+```
+
+---
+
+## 10. Side-by-Side Comparison
+
+| Aspect | 3 Shards | 3 Read Replicas (+ 1 Master) |
+|--------|----------|------------------------------|
+| **Physical Machines** | 3 machines | 4 machines (1 master + 3 replicas) |
+| **Data per Machine** | 33% (DIFFERENT) | 100% (IDENTICAL) |
+| **Total Unique Data** | 100% (split) | 100% (replicated) |
+| **Total Storage Used** | 100% (efficient) | 400% (4x redundant) |
+| **Data Overlap** | ❌ None | ✅ Complete |
+| **Write Capacity** | 3x (distributed) | 1x (only master) |
+| **Read Capacity** | 3x (distributed) | 4x (master + replicas) |
+| **Write Bottleneck** | No (distributed) | Yes (master only) |
+| **Query Complexity** | Complex (may need scatter-gather) | Simple (query any node) |
+| **Use Case** | Data too big for one machine | Read-heavy workload |
+| **Failure Impact** | Lose 33% of data* | Promote replica → no data loss |
+| **Consistency** | Consistent per shard | Eventually consistent |
+| **Scalability** | Horizontal (add shards) | Vertical (limited replicas) |
+| **Example QPS Gain** | 2.5K → 7.5K writes | 2.5K → 10K reads |
+
+*Without replication per shard
+
+---
+
+## 11. Real-World Example: Leaderboard Queries
+
+### Scenario: 9 million users
+
+```
+User Data:
+- mary1934: score 850
+- john_doe: score 920
+- alice123: score 875
+- ... (9 million total users)
+```
+
+### With 3 Shards (No Replication)
+
+```
+Shard 0 (3M users):          Shard 1 (3M users):          Shard 2 (3M users):
+- mary1934: 850              - john_doe: 920              - alice123: 875
+- bob_smith: 760             - sarah_j: 890               - tom_cruz: 910
+- ... (3M users)             - ... (3M users)             - ... (3M users)
+```
+
+**Query 1: Get mary's rank**
+```python
+# Only query Shard 0 (where mary lives)
+result = query_shard_0("ZREVRANK leaderboard mary1934")
+# Fast: O(log n) where n = 3M
+```
+
+**Query 2: Get Top 10 globally**
+```python
+# Must query ALL 3 shards
+top_10_shard_0 = query_shard_0("ZREVRANGE leaderboard 0 9")  # 10 results
+top_10_shard_1 = query_shard_1("ZREVRANGE leaderboard 0 9")  # 10 results
+top_10_shard_2 = query_shard_2("ZREVRANGE leaderboard 0 9")  # 10 results
+
+# Merge 30 results and get top 10
+final_top_10 = merge_and_sort([top_10_shard_0, top_10_shard_1, top_10_shard_2])[:10]
+# 3x network calls + merge overhead
+```
+
+**Query 3: Update mary's score**
+```python
+# Only update Shard 0
+update_shard_0("ZINCRBY leaderboard 1 mary1934")
+# Fast: O(log n) where n = 3M
+# Other shards unaffected
+```
+
+---
+
+### With 3 Read Replicas (+ 1 Master)
+
+```
+Master (9M users):           Replica 1 (9M users):
+- mary1934: 850              - mary1934: 850
+- john_doe: 920              - john_doe: 920
+- alice123: 875              - alice123: 875
+- bob_smith: 760             - bob_smith: 760
+- sarah_j: 890               - sarah_j: 890
+- tom_cruz: 910              - tom_cruz: 910
+- ... (ALL 9M users)         - ... (ALL 9M users)
+
+Replica 2 (9M users):        Replica 3 (9M users):
+- mary1934: 850              - mary1934: 850
+- john_doe: 920              - john_doe: 920
+- ... (ALL 9M users)         - ... (ALL 9M users)
+```
+
+**Query 1: Get mary's rank**
+```python
+# Query ANY replica (load balanced)
+result = query_replica_1("ZREVRANK leaderboard mary1934")
+# Same speed: O(log n) where n = 9M
+# But load distributed across replicas
+```
+
+**Query 2: Get Top 10 globally**
+```python
+# Query ANY ONE replica
+top_10 = query_replica_2("ZREVRANGE leaderboard 0 9")
+# Simple: Only 1 network call
+# Fast: Each replica has all data
+```
+
+**Query 3: Update mary's score**
+```python
+# MUST go to master
+update_master("ZINCRBY leaderboard 1 mary1934")
+# Then master replicates to all replicas (async)
+# Master is bottleneck for ALL writes
+```
+
+---
+
+## 12. Redis Cluster: The Best of Both Worlds
+
+**Redis Cluster combines sharding AND replication:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Redis Cluster                              │
+│                    (6 Physical Machines)                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+    ┌─────────┐          ┌─────────┐         ┌─────────┐
+    │Master 0 │          │Master 1 │         │Master 2 │
+    │Slots    │          │Slots    │         │Slots    │
+    │0-5460   │          │5461-    │         │10923-   │
+    │         │          │10922    │         │16383    │
+    │33% data │          │33% data │         │33% data │
+    └────┬────┘          └────┬────┘         └────┬────┘
+         │                    │                    │
+         │ Async Replication  │ Async Replication  │ Async Replication
+         ▼                    ▼                    ▼
+    ┌─────────┐          ┌─────────┐         ┌─────────┐
+    │Replica 0│          │Replica 1│         │Replica 2│
+    │(Slave)  │          │(Slave)  │         │(Slave)  │
+    │Slots    │          │Slots    │         │Slots    │
+    │0-5460   │          │5461-    │         │10923-   │
+    │         │          │10922    │         │16383    │
+    │33% data │          │33% data │         │33% data │
+    └─────────┘          └─────────┘         └─────────┘
+    Machine 1            Machine 3            Machine 5
+    Machine 2            Machine 4            Machine 6
+```
+
+**How it works:**
+1. **Sharding**: Data split across 3 masters (horizontal partitioning)
+2. **Replication**: Each master has 1+ replicas (high availability)
+3. **Reads**: Can read from master or replicas (configurable)
+4. **Writes**: Always go to appropriate master, then replicate
+5. **Failover**: Replica auto-promoted if master fails
+
+**Example with 9M users:**
+- **Master 0 + Replica 0**: 3M users (slots 0-5460)
+- **Master 1 + Replica 1**: 3M users (slots 5461-10922)
+- **Master 2 + Replica 2**: 3M users (slots 10923-16383)
+
+**Benefits:**
+- ✅ Storage capacity: 3x (sharding)
+- ✅ Write throughput: 3x (sharding)
+- ✅ Read throughput: 6x (3 masters + 3 replicas)
+- ✅ High availability (replication)
+- ✅ Automatic failover
+- ✅ Automatic rebalancing
+
+---
+
+## 13. Decision Matrix: When to Use What?
+
+### Single Redis Instance (No Sharding, No Replication)
+**Use when:**
+- Data fits in one machine (< 100GB)
+- QPS < 50,000
+- Downtime acceptable for few minutes
+- Development/testing environment
+
+**Leaderboard example:**
+- 5M DAU, 1.3GB data, 2,500 QPS ✅ Perfect fit
+
+---
+
+### Single Redis with Replicas (No Sharding)
+**Use when:**
+- Data fits in one machine (< 100GB)
+- Read-heavy workload (90%+ reads)
+- Need high availability
+- Write QPS < 50,000
+
+**Leaderboard example:**
+- 5M DAU, heavy read traffic (Top 10 queries)
+- 1 master + 2 replicas = 3x read capacity
+
+**Configuration:**
+```
+Master: 1.3GB, handles 2,500 writes/sec
+Replica 1: 1.3GB, handles reads
+Replica 2: 1.3GB, handles reads
+Total read capacity: ~150K reads/sec
+```
+
+---
+
+### Sharded Redis (No Replication per Shard)
+**Use when:**
+- Data too big for one machine (> 100GB)
+- Write-heavy workload
+- Can tolerate data loss (no mission-critical)
+- Cost-sensitive
+
+**Leaderboard example:**
+- 500M DAU, 65GB data, 250K writes/sec
+- 10 shards = 6.5GB per shard, 25K writes/sec per shard
+- ⚠️ Risk: If one shard fails, lose 10% of data
+
+---
+
+### Redis Cluster (Sharding + Replication)
+**Use when:**
+- Data too big for one machine (> 100GB)
+- High write AND read traffic
+- Need high availability
+- Production environment
+- Mission-critical data
+
+**Leaderboard example:**
+- 500M DAU, 65GB data, 250K writes/sec, 500K reads/sec
+- 10 masters + 10 replicas = 20 machines
+- Each master: 6.5GB, 25K writes/sec
+- Each replica: 6.5GB, handles reads
+- ✅ Full redundancy, auto-failover
+
+**Configuration:**
+```
+Shard 0: Master (6.5GB) + Replica (6.5GB)
+Shard 1: Master (6.5GB) + Replica (6.5GB)
+...
+Shard 9: Master (6.5GB) + Replica (6.5GB)
+
+Total: 20 machines, 130GB total storage (65GB × 2)
+Write capacity: 250K ops/sec
+Read capacity: 500K ops/sec
+```
+
+---
+
+## 14. Summary Table
+
+| Configuration | Machines | Unique Data | Redundancy | Write QPS | Read QPS | Use Case |
+|---------------|----------|-------------|------------|-----------|----------|----------|
+| **1 Redis** | 1 | 100% | ❌ None | Baseline | Baseline | Small scale |
+| **1 Master + 3 Replicas** | 4 | 100% | ✅ 4x copy | 1x | 4x | Read-heavy |
+| **3 Shards** | 3 | 100% | ❌ None | 3x | 3x | Large data |
+| **3 Shards + 3 Replicas** | 6 | 100% | ✅ 2x copy | 3x | 6x | Production |
+| **10 Shards + 10 Replicas** | 20 | 100% | ✅ 2x copy | 10x | 20x | Massive scale |
+
+---
+
+
+### The Golden Rule
+
+```
+Need more STORAGE or WRITE capacity? → Shard
+Need more READ capacity or AVAILABILITY? → Replicate
+Need both? → Redis Cluster (Shard + Replicate)
+```
+
