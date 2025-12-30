@@ -1,258 +1,138 @@
-# URL Shortener - Non-Functional Requirements & Design Decisions
+# URL Shortener - Part 1: Requirements & Capacity
 
-## 1. Non-Functional Requirements
-
-### Performance Requirements
-- **Latency**: 
-  - URL redirect: < 50ms (p99)
-  - URL creation: < 200ms (p99)
-  - Analytics query: < 1s (p95)
-- **Throughput**: 
-  - 10,000 URL redirects/second
-  - 100 URL creations/second
-  - Read:Write ratio of 100:1
-
-### Scalability Requirements
-- **Growth**: Support 100M URLs in first year, 1B in 5 years
-- **Traffic**: Handle 10x traffic spikes during viral events
-- **Geographic**: Serve users globally with < 100ms additional latency
-
-### Availability Requirements
-- **Uptime**: 99.9% availability (43 minutes downtime/month)
-- **Recovery**: RTO < 15 minutes, RPO < 5 minutes
-- **Degradation**: Graceful degradation when dependencies fail
-
-### Data Requirements
-- **Retention**: URLs active for minimum 5 years unless deleted
-- **Consistency**: Eventual consistency acceptable for analytics
-- **Durability**: 99.999% durability for URL mappings
-
-### Security Requirements
-- **Authentication**: JWT-based with 1-hour expiry
-- **Rate Limiting**: 100 requests/hour per IP for creation
-- **Protection**: DDoS mitigation, malicious URL blocking
-- **Encryption**: TLS 1.3 for all communications
+**Navigation**: [Part 2: Architecture & Design →](ComponentAndDataFlow)
 
 ---
 
-## 2. Key Design Decisions
+## 1. Functional Requirements
 
-### Decision 1: Redis for Caching Layer
-**Context**: Need fast lookups for frequently accessed URLs
+### Core Features
+- **URL Shortening**: Convert long URLs to 7-character short codes
+- **URL Redirection**: Redirect short URLs to original URLs (< 10ms)
+- **Custom URLs**: Vanity URLs for authenticated users
+- **Analytics**: Track clicks, geography, referrers, devices
+- **User Management**: Registration, authentication, URL ownership
 
-**Decision**: Use Redis Cluster with master-replica configuration
+### Out of Scope (MVP)
+- Link expiration, QR codes, A/B testing
 
-**Rationale**:
-- Sub-millisecond read latency for cache hits
-- Power-law distribution means 20% URLs = 80% traffic
-- Single-threaded nature is acceptable for simple key-value lookups
-- Built-in replication for high availability
+## 2. Non-Functional Requirements
 
-**Alternatives Considered**:
-- Memcached: Lacks persistence and advanced data structures
-- Application-level cache: Doesn't scale across instances
+### Performance
+- **Latency**: Redirection < 10ms (p99), Creation < 100ms (p99)
+- **Read-heavy**: 100:1 read-to-write ratio
+- **Availability**: 99.9% uptime (8.76 hours downtime/year)
 
-**Trade-offs**:
-- ✅ Extremely fast reads
-- ✅ Reduces database load by 90%+
-- ❌ Additional infrastructure complexity
-- ❌ Cache invalidation challenges
+### Scale
+- **Users**: 100M Daily Active Users (DAU)
+- **Traffic spikes**: Handle 3x normal load
 
----
+### Data
+- **Retention**: URLs persist indefinitely
+- **Durability**: 99.999999999% (11 nines)
 
-### Decision 2: Database Sharding by Short Code Hash
-**Context**: Single database cannot handle billions of URLs
+## 3. Capacity Estimation
 
-**Decision**: Shard PostgreSQL databases using consistent hashing of short code
+### 3.1 Traffic Estimates
 
-**Rationale**:
-- Predictable shard lookup (hash(short_code) % num_shards)
-- Even distribution of data across shards
-- No cross-shard queries needed for core operations
-- Each shard independently scalable
+#### Assumptions (Clarify in Interview)
+- **DAU**: 100M users
+- **URLs per user per day**: 0.1 (most users don't create URLs daily)
+- **Clicks per URL per day**: 10 (average)
+- **Peak traffic**: 3x average
+- **Read:Write ratio**: 100:1 (conservative estimate)
 
-**Alternatives Considered**:
-- Range-based sharding: Leads to hot shards
-- User-based sharding: Complicates anonymous URL lookups
+#### Write Traffic (URL Creation)
+- URLs/day: 100M × 0.1 = **10M URLs/day**
+- Write QPS: 10M / 86,400 = **116 writes/sec**
+- Peak write QPS: 116 × 3 = **348 writes/sec**
 
-**Trade-offs**:
-- ✅ Horizontal scalability
-- ✅ No single point of bottleneck
-- ❌ Complex shard rebalancing when adding shards
-- ❌ Analytics queries become more complex
+#### Read Traffic (URL Redirection)
+- Redirects/day: 10M × 10 = **100M redirects/day**
+- Read QPS: 100M / 86,400 = **1,157 reads/sec**
+- Peak read QPS: 1,157 × 3 = **3,471 reads/sec**
 
----
+### 3.2 Storage Estimates
 
-### Decision 3: Asynchronous Analytics via Message Queue
-**Context**: Click tracking must not slow down redirects
+#### URL Mapping Storage (5 years)
+**Per URL Record**:
+- Short code: 7 bytes
+- Original URL: 2,000 bytes (average)
+- User ID: 8 bytes
+- Timestamps + metadata: ~200 bytes
+- **Total**: ~2.2 KB per record
 
-**Decision**: Use Kafka to decouple event publishing from processing
+**Total Storage**:
+- URLs over 5 years: 10M/day × 1,825 days = **18.25B URLs**
+- Raw storage: 18.25B × 2.2 KB = **40 TB**
+- With 3x replication: **120 TB**
 
-**Rationale**:
-- Redirects complete in < 50ms without waiting for analytics
-- Buffering handles traffic spikes without data loss
-- Analytics Processor can batch process for efficiency
-- Separate scaling of analytics infrastructure
+#### Analytics Storage (1 year)
+**Per Click Event**: ~0.5 KB (timestamp, IP, user agent, referrer)
 
-**Alternatives Considered**:
-- Synchronous database writes: Would violate latency requirements
-- Log aggregation: Less reliable, harder to guarantee delivery
+**Total Storage**:
+- Click events/year: 100M/day × 365 = 36.5B events
+- Raw events: 36.5B × 0.5 KB = **18 TB**
+- Aggregated data: ~2 TB
+- **Total**: **~20 TB/year**
 
-**Trade-offs**:
-- ✅ Fast redirects (NFR met)
-- ✅ Analytics survives traffic spikes
-- ❌ Analytics delayed by 5-10 seconds
-- ❌ Additional infrastructure component
+### 3.3 Memory (Cache) Estimates
 
----
+#### Strategy: Cache Hot URLs
+- **80-20 rule**: 20% of URLs get 80% of traffic
+- **Practical cache**: 1% of total URLs = 182.5M URLs
+- **Memory needed**: 182.5M × 2.2 KB = **400 GB**
+- **Expected hit rate**: 95%+ (power-law distribution)
 
-### Decision 4: CDN for Static Assets and Hot URLs
-**Context**: Reduce latency for global users
+### 3.4 Bandwidth Estimates
 
-**Decision**: CloudFront CDN for static assets; optional caching of top 1% URLs
+#### Incoming (URL Creation)
+- QPS: 116 × request size (2.5 KB) = **2.3 Mbps** (peak: 7 Mbps)
 
-**Rationale**:
-- Edge caching reduces latency by 100-200ms globally
-- Offloads 40-50% of redirect traffic for viral URLs
-- Built-in DDoS protection
-- Geographic proximity to users
+#### Outgoing (URL Redirection)
+- QPS: 1,157 × response size (0.5 KB) = **4.6 Mbps** (peak: 14 Mbps)
 
-**Alternatives Considered**:
-- No CDN: Poor global performance
-- Multi-region deployment: More complex, higher cost
+### 3.5 Database Sharding Requirements
 
-**Trade-offs**:
-- ✅ Meets global latency requirements
-- ✅ Reduces origin server load
-- ❌ Cache invalidation complexity
-- ❌ Additional cost for high traffic
+**Why shard?**
+- Single DB limit: ~10M records perform well (indexes fit in memory)
+- Our scale: 18.25B records over 5 years
+- **Need**: 18.25B / 10M = **~1,825 shards** (over 5 years)
 
----
+**Initial deployment**:
+- Start with **128 shards** (room to grow)
+- Add shards as data grows
 
-### Decision 5: Separate Analytics Database
-**Context**: Analytics queries must not impact core service
+## 4. Short Code Design
 
-**Decision**: Use ClickHouse columnar database for analytics
+### Character Set & Length
+- **Character set**: Base62 (a-z, A-Z, 0-9) = 62 characters
+- **Capacity needed**: 73B URLs (10M/day × 10 years × 2 safety margin)
 
-**Rationale**:
-- Optimized for OLAP workloads (aggregations, time-series)
-- 10-100x faster than PostgreSQL for analytical queries
-- Compression reduces storage costs
-- No impact on operational database performance
+**Length calculation**:
+- 6 chars: 62^6 = 56.8B ❌ (insufficient)
+- 7 chars: 62^7 = 3.5T ✅ (plenty!)
+- 8 chars: 62^8 = 218T (overkill)
 
-**Alternatives Considered**:
-- Same PostgreSQL database: Would impact redirect performance
-- NoSQL (MongoDB): Not optimized for aggregations
+**Decision**: **7 characters**
 
-**Trade-offs**:
-- ✅ Fast complex queries
-- ✅ Isolated from core service
-- ❌ Additional database to maintain
-- ❌ Data duplication
+### Collision Probability
+- After 1B URLs: ~0.014% chance
+- With 3 retries: ~0.00000027% (acceptable)
 
----
+## 5. High-Level Numbers Summary
 
-### Decision 6: JWT-Based Stateless Authentication
-**Context**: Need scalable authentication across services
-
-**Decision**: JWT tokens validated at API Gateway
-
-**Rationale**:
-- No session storage required (stateless)
-- API Gateway can validate without calling Auth Service
-- Tokens include user ID and permissions
-- Standard, well-supported approach
-
-**Alternatives Considered**:
-- Session-based: Requires shared session store
-- OAuth delegation: Unnecessary complexity for first version
-
-**Trade-offs**:
-- ✅ Horizontally scalable
-- ✅ Fast validation (no network call)
-- ❌ Cannot revoke tokens before expiry
-- ❌ Token size larger than session ID
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Write QPS | 116 (peak: 348) | URL creation |
+| Read QPS | 1,157 (peak: 3,471) | Redirection (100x writes) |
+| Storage (5 years) | 120 TB | With 3x replication |
+| Analytics (1 year) | 20 TB | Raw + aggregated |
+| Cache memory | 400 GB | 1% of URLs, 95%+ hit rate |
+| DB shards (initial) | 128 | Scale to 1,825 over 5 years |
+| Bandwidth | ~7 Mbps | Peak incoming/outgoing |
+| Short code length | 7 chars | 3.5T capacity (base62) |
 
 ---
 
-### Decision 7: Base62 Encoding for Short Codes
-**Context**: Need short, URL-safe identifiers
-
-**Decision**: 7-character Base62 codes (a-z, A-Z, 0-9)
-
-**Rationale**:
-- 62^7 = 3.5 trillion possible codes
-- URL-safe without encoding
-- Collision probability negligible with random generation
-- Human-readable (no special characters)
-
-**Alternatives Considered**:
-- UUID: Too long (36 characters)
-- Base64: Contains URL-unsafe characters (/, +)
-- Sequential IDs: Predictable, security concern
-
-**Trade-offs**:
-- ✅ Compact representation
-- ✅ Sufficient keyspace
-- ❌ Requires collision checking
-- ❌ Not sortable by creation time
-
----
-
-## 3. NFR → Design Mapping
-
-| NFR | Design Decision | Component |
-|-----|----------------|-----------|
-| Redirect < 50ms | Redis caching, CDN | Redis Cluster, CloudFront |
-| 10K redirects/sec | Horizontal scaling, stateless | URL Redirect Service |
-| 100:1 read ratio | Read-optimized caching | Redis, DB read replicas |
-| 99.9% availability | Multi-AZ deployment, replication | All services |
-| Eventual consistency OK | Async analytics processing | Message Queue, Analytics Processor |
-| Global < 100ms | CDN, multi-region option | CloudFront |
-| Handle spikes | Message Queue buffering | Kafka |
-| Billions of URLs | Database sharding | DB Proxy, DB Shards |
-
----
-
-## 4. Capacity Planning (Year 1)
-
-### Assumptions
-- 100M URLs created
-- 10B redirects (100:1 ratio)
-- Average URL size: 2KB (including metadata)
-
-### Storage Requirements
-- URL database: 100M × 2KB = 200GB
-- Analytics (raw events): 10B × 500 bytes = 5TB
-- Analytics (aggregated): ~100GB
-
-### Compute Requirements
-- URL Shortener: 5 instances (20 req/sec each)
-- URL Redirect: 50 instances (200 req/sec each)
-- Analytics Processor: 10 instances
-
-### Cache Requirements
-- Redis: 20% of URLs cached = 20M × 2KB = 40GB
-- With replication: 80GB total
-
----
-
-## 5. Monitoring & SLIs
-
-### Service Level Indicators
-- **Availability**: Successful redirects / Total redirect attempts
-- **Latency**: p50, p95, p99 redirect time
-- **Error Rate**: 5xx errors / Total requests
-- **Cache Hit Rate**: Redis hits / Total lookups
-
-### Key Metrics
-- Redirect success rate > 99.9%
-- Cache hit rate > 80%
-- p99 redirect latency < 50ms
-- Queue lag < 10 seconds
-
-### Alerts
-- Error rate > 1% for 5 minutes
-- p99 latency > 100ms for 5 minutes
-- Cache hit rate < 70%
-- Queue lag > 60 seconds
+**Next**: [Part 2: Architecture & Design →](ComponentAndDataFlow)
