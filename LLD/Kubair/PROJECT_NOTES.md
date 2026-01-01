@@ -5,27 +5,29 @@
 ## High-Level Flow (HLD)
 ```mermaid
 flowchart TD
-    Client[Clients / Upstream systems\nHTTP or SQS message] --> API[FastAPI\n/app/main.py]
-    API -->|HTTP /agent/run/deal_running_agent\nor /agent/run/stage| Service[deal_running_agent_service]
+    Client[Clients / Upstream systems<br/>HTTP or SQS message] --> API[FastAPI<br/>/app/main.py]
+    API -->|HTTP /agent/run/deal_running_agent<br/>or /agent/run/stage| Service[deal_running_agent_service]
     API -->|/agent/run/borrower_config_agent| Service
     API -->|/run/mark_complete| MarkComplete[mark_complete_service]
+    
     subgraph Queueing
-      SQS[(AWS SQS)] --> QueueListener[queue_listener.py\nsubprocess]
+      SQS[(AWS SQS)] --> QueueListener[queue_listener.py<br/>subprocess]
       QueueListener --> Service
     end
+    
     Service --> EP[email_parsing_agent]
     EP --> MA[merge_and_aggregate_agent]
-    MA --> QS[query_segregation_agent\nuses fetch_doc_list_config tool]
+    MA --> QS[query_segregation_agent<br/>uses fetch_doc_list_config tool]
     QS -->|LENDER requests| QD1[query_deduplication_agent]
     QD1 -->|BORROWER stage| QD2[query_deduplication_agent]
-    QD2 --> Save[save_requirements_to_db_api\n(AICA)]
-    QS -.-> DBTools[fetch_doc_list_config (Polus)]
-    QD1 -.-> DBFetch[fetch_list_b_from_db (AICA)]
+    QD2 --> Save[save_requirements_to_db_api<br/>AICA]
+    QS -.-> DBTools[fetch_doc_list_config<br/>Polus]
+    QD1 -.-> DBFetch[fetch_list_b_from_db<br/>AICA]
     QD2 -.-> DBFetch
-    Save --> Slack[[Slack alerts on failures]]
-    MarkComplete --> AICA[AICA APIs\nneed info + metadata]
+    Save --> Slack[Slack alerts on failures]
+    MarkComplete --> AICA_API[AICA APIs<br/>need info + metadata]
     MarkComplete --> Redis[(Redis queues/cache)]
-    Scheduler[[Background scheduler\nprocess_pending_organizations]] --> MarkComplete
+    Scheduler[Background scheduler<br/>process_pending_organizations] --> MarkComplete
 ```
 
 ## Core Business Logic
