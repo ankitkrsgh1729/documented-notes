@@ -238,11 +238,8 @@ Result helper(TreeNode root) {
 }
 ```
 
-### 3. **LCA with Parent Pointers**
-- Strategy: Use HashSet to track path from one node
-- Walk from other node until intersection found
 
-### 4. **LCA in BST** (LeetCode 235)
+### 3. **LCA in BST** (LeetCode 235)
 - Optimization: Use BST property
 - If `p.val < root.val < q.val` → root is LCA
 - If both smaller → search left
@@ -289,26 +286,6 @@ Two people walk from nodes toward root → where they meet is LCA
 
 ---
 
-## Quick Decision Tree
-
-```
-Is it a tree problem with "common" or "ancestor"?
-├─ YES → Likely LCA pattern
-│  ├─ Binary Tree? → Standard LCA
-│  ├─ BST? → Optimized LCA with value comparison
-│  └─ Need depth info? → Return {depth, node} pair
-└─ NO → Consider other patterns
-```
-
----
-
-## Related Patterns
-- **DFS/Tree Traversal**: Foundation for LCA
-- **Parent Tracking**: Alternative LCA approach
-- **Path Finding**: Often uses LCA
-- **Tree Distance**: LCA + depth calculations
-
----
 
 
 *Last Updated: January 2026*
