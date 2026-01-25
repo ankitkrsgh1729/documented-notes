@@ -285,7 +285,3 @@ Two people walk from nodes toward root → where they meet is LCA
 | Worst case | O(n) | Skewed tree |
 
 ---
-
-
-
-*Last Updated: January 2026*
